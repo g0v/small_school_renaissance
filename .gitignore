@@ -11,7 +11,7 @@
 # (Start with "!")
 
 # Directories
-
+!scripts
 
 # Extensions
 !*.sh
