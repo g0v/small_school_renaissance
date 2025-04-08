@@ -12,10 +12,12 @@
 
 # Directories
 !scripts
+!fixture
 
 # Extensions
 !*.sh
 !*.md
+!*.txt
 
 # Files
 !.gitignore
