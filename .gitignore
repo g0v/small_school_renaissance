@@ -11,12 +11,13 @@
 # (Start with "!")
 
 # Directories
-!scripts
 !fixture
+!scripts
 
 # Extensions
-!*.sh
 !*.md
+!*.sh
+!*.toml
 !*.txt
 
 # Files
