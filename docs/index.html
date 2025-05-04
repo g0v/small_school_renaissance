@@ -1,0 +1,269 @@
+<!doctype html>
+<html>
+  <head>
+    <title>130年學生人數推估</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+      html,
+      body,
+      #map {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      .popup-table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 14px;
+      }
+      .popup-table td {
+        padding: 4px 6px;
+        border: 1px solid #ccc;
+      }
+      .popup-table tr:nth-child(odd) {
+        background-color: #f9f9f9;
+      }
+      .popup-table strong {
+        font-weight: bold;
+      }
+      .legend {
+        background: white;
+        padding: 6px 8px;
+        font:
+          14px/16px Arial,
+          sans-serif;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <!-- Leaflet -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <!-- PapaParse -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <!-- Leaflet.heat -->
+    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+
+    <!-- Leaflet.SvgShapeMarkers -->
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-svg-shape-markers@1.4.0/dist/leaflet-svg-shape-markers.min.js"></script>
+
+    <script>
+      const rectangleMarkers = [];
+      const map = L.map("map").setView([23.5, 121], 7);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution:
+          '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
+
+      let markerLayer = L.layerGroup();
+
+      fetch("113-107.csv")
+        .then((response) => {
+          if (!response.ok) throw new Error("Failed to load CSV");
+          return response.text();
+        })
+        .then((csvText) => {
+          Papa.parse(csvText, {
+            header: true,
+            skipEmptyLines: true,
+            complete: function (results) {
+              const heatData = [];
+
+              results.data.forEach((row) => {
+                const lat = parseFloat(row["緯度"]);
+                const lng = parseFloat(row["經度"]);
+                const population_student_estimate_130_filtered = parseFloat(
+                  row["推估130年人數"],
+                );
+
+                if (!isNaN(lat) && !isNaN(lng)) {
+                  // Add to heatmap ONLY if population_student_estimate_130_filtered is ≤ 100
+                  const maxPop = 100;
+                  const intensity = Math.max(
+                    0.1,
+                    1 -
+                      Math.min(
+                        population_student_estimate_130_filtered,
+                        maxPop,
+                      ) /
+                        maxPop,
+                  );
+
+                  if (
+                    !isNaN(population_student_estimate_130_filtered) &&
+                    population_student_estimate_130_filtered <= 100
+                  ) {
+                    heatData.push([lat, lng, intensity]);
+                  }
+
+                  const school_name = row["學校名稱"] || "N/A";
+                  const school_code = row["學校代碼"] || "N/A";
+                  const school_type = row["地區屬性"] || "-";
+                  const in_county = row["縣市名稱"] || "N/A";
+                  const in_town = row["鄉鎮市區"] || "N/A";
+                  const population_student_latest = row["學生人數"] || "N/A";
+                  const population_student_previous = isNaN(
+                    parseInt(row["參考學生人數"]),
+                  )
+                    ? "N/A"
+                    : parseInt(row["參考學生人數"]);
+                  const population_student_diff = isNaN(
+                    parseInt(row["學生人數差異"]),
+                  )
+                    ? "N/A"
+                    : parseInt(row["學生人數差異"]);
+                  const population_student_percentage = isNaN(
+                    parseFloat(row["學生人數變化百分比"]),
+                  )
+                    ? "N/A"
+                    : `${(parseFloat(row["學生人數變化百分比"]) * 100).toFixed(0)}%`;
+
+                  const population_student_estimate_130_origin = isNaN(
+                    parseInt(row["推估130年人數"]),
+                  )
+                    ? "N/A"
+                    : parseInt(row["推估130年人數"]);
+
+                  const popupContent = `
+                  <table class="popup-table">
+                      <tr><td><strong>校名</strong></td><td>${school_name}</td></tr>
+                      <tr><td><strong>代碼</strong></td><td>${school_code}</td></tr>
+                      <tr><td><strong>縣市</strong></td><td>${in_county}</td></tr>
+                      <tr><td><strong>鄉鎮市區</strong></td><td>${in_town}</td></tr>
+                      <tr><td><strong>學校屬性</strong></td><td>${school_type}</td></tr>
+                      <tr><td><strong>113年學生人數</strong></td><td>${population_student_latest}</td></tr>
+                      <tr><td><strong>107年學生人數</strong></td><td>${population_student_previous}</td></tr>
+                      <tr><td><strong>學生人數差異</strong></td><td>${population_student_diff}</td></tr>
+                      <tr><td><strong>人數差異百分比</strong></td><td>${population_student_percentage}</td></tr>
+                      <tr><td><strong>推估130年學生人數</strong></td><td>${population_student_estimate_130_origin}</td></tr>
+                  </table>
+                `;
+
+                  let markerOptions = {
+                    radius: 8,
+                    weight: 1,
+                    fillOpacity: 0.8,
+                  };
+
+                  if (population_student_estimate_130_origin == 0) {
+                    marker = L.shapeMarker([lat, lng], {
+                      ...markerOptions,
+                      shape: "star-7",
+                      color: "black",
+                      fillColor: "black",
+                    }).bindPopup(popupContent);
+                  } else if (
+                    population_student_estimate_130_origin > 0 &&
+                    population_student_estimate_130_origin <= 30
+                  ) {
+                    marker = L.shapeMarker([lat, lng], {
+                      ...markerOptions,
+                      shape: "star",
+                      color: "red",
+                      fillColor: "red",
+                    }).bindPopup(popupContent);
+                  } else if (
+                    population_student_estimate_130_origin > 30 &&
+                    population_student_estimate_130_origin <= 50
+                  ) {
+                    marker = L.shapeMarker([lat, lng], {
+                      ...markerOptions,
+                      shape: "triangle",
+                      color: "orange",
+                      fillColor: "orange",
+                    }).bindPopup(popupContent);
+                  } else if (
+                    population_student_estimate_130_origin > 50 &&
+                    population_student_estimate_130_origin <= 100
+                  ) {
+                    marker = L.shapeMarker([lat, lng], {
+                      ...markerOptions,
+                      shape: "square",
+                      color: "yellow",
+                      fillColor: "yellow",
+                    }).bindPopup(popupContent);
+                  } else {
+                    marker = L.shapeMarker([lat, lng], {
+                      ...markerOptions,
+                      shape: "circle",
+                      color: "green",
+                      fillColor: "green",
+                    }).bindPopup(popupContent);
+                  }
+
+                  markerLayer.addLayer(marker);
+                }
+              });
+
+              // Heatmap always visible
+              const heat = L.heatLayer(heatData, {
+                radius: 80,
+                blur: 0,
+                maxZoom: 24,
+                gradient: { 0.1: "orange", 0.4: "red" },
+              }).addTo(map);
+
+              const overlays = { 熱區圖: heat, 學校點位: markerLayer };
+              L.control.layers(null, overlays).addTo(map);
+
+              const legend = L.control({ position: "bottomright" });
+              legend.onAdd = function (map) {
+                const div = L.DomUtil.create("div", "info legend");
+                div.innerHTML = `
+                <strong>熱區圖說明</strong><br/>
+                100人以下學校群聚密度<br/>
+                密度大>>>密度小<br/>
+                紅>橘>黃<br/>
+                <strong>（130學年推估狀態）</strong><br/>
+                `;
+                return div;
+              };
+              legend.addTo(map);
+
+              const markerLegend = L.control({ position: "bottomleft" });
+
+              markerLegend.onAdd = function (map) {
+                const div = L.DomUtil.create("div", "info legend");
+                div.innerHTML = `
+                <strong>學校點位圖示</strong><br/>
+                <svg width="14" height="14" viewBox="0 0 14 14">
+                <polygon points="7.00,0.50 9.82,12.86 1.92,2.95 13.34,8.45 0.66,8.45 12.08,2.95 4.18,12.86" fill="black" stroke="black" stroke-width="1"/></svg>
+                人數=0<br/>
+                <svg width="14" height="14" viewBox="0 0 14 14">
+                <polygon points="7,0.5 10.6,11.2 0.7,4.8 13.3,4.8 3.4,11.2 7,0.5" fill="red" stroke="red" stroke-width="1"/></svg>
+                0<人數<=30<br/>
+                <svg width="14" height="14" viewBox="0 0 14 14">
+                <polygon points="7,1 13,13 1,13" fill="orange" stroke="orange" stroke-width="1"/></svg>
+                30<人數<=50<br/>
+                <svg width="14" height="14" viewBox="0 0 14 14">
+                <polygon points="2,2 12,2 12,12 2,12" fill="yellow" stroke="gray" stroke-width="1"/></svg>
+                50<人數<=100<br/>
+                <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill="green" stroke="green" stroke-width="1"/></svg>
+                人數>100<br/>
+                <strong>（130學年推估狀態）</strong><br/>
+              `;
+                return div;
+              };
+
+              markerLegend.addTo(map);
+
+              // Show markers depends on the zoom level
+              map.on("zoomend", () => {
+                if (map.getZoom() >= 11) {
+                  if (!map.hasLayer(markerLayer)) map.addLayer(markerLayer);
+                } else {
+                  if (map.hasLayer(markerLayer)) map.removeLayer(markerLayer);
+                }
+              });
+            },
+          });
+        })
+        .catch((error) => console.error("Error loading CSV:", error));
+    </script>
+  </body>
+</html>
